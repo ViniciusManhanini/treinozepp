@@ -1,0 +1,46 @@
+{
+  "trainingTypeId": 10,
+  "trainingTypeName": "Treino de Força",
+  "templateName": "MUS TESTE 01",
+  "name": "MUS TESTE 01",
+  "steps": [
+    {
+      "stepType": "training",
+      "actionName": "Agachamento com barra",
+      "intervalType": "reps",
+      "intervalUnitValue": "8",
+      "weightType": "none",
+      "note": "Série 1 de 3"
+    },
+    {
+      "stepType": "recovery",
+      "actionName": "Recuperação",
+      "intervalType": "time",
+      "intervalUnitValue": "60",
+      "note": "Descanso entre séries"
+    },
+    {
+      "stepType": "training",
+      "actionName": "Agachamento com barra",
+      "intervalType": "reps",
+      "intervalUnitValue": "8",
+      "weightType": "none",
+      "note": "Série 2 de 3"
+    },
+    {
+      "stepType": "recovery",
+      "actionName": "Recuperação",
+      "intervalType": "time",
+      "intervalUnitValue": "60",
+      "note": "Descanso entre séries"
+    },
+    {
+      "stepType": "training",
+      "actionName": "Agachamento com barra",
+      "intervalType": "reps",
+      "intervalUnitValue": "8",
+      "weightType": "none",
+      "note": "Série 3 de 3"
+    }
+  ]
+}
