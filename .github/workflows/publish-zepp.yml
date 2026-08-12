@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - '.github/workflows/publish-zepp.yml'
+      - 'payload/zepp_specs.b64'
 
 permissions:
   contents: write
@@ -14,57 +15,101 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Decode and unpack templates
-        run: |
-          rm -rf treinos /tmp/zepp-package
-          mkdir -p treinos /tmp/zepp-package
-          base64 -d payload/Time_Hibrido_Musculacao_Zepp_12_Semanas.zip.b64 > /tmp/zepp.zip
-          unzip -o /tmp/zepp.zip -d /tmp/zepp-package
-          mv /tmp/zepp-package/MUS_*.json treinos/
-          cp /tmp/zepp-package/manifesto.csv manifesto.csv
-          cp /tmp/zepp-package/README.md README_TECNICO.md
-
-      - name: Build one-link import index
+      - name: Generate 60 Zepp templates
         run: |
           python - <<'PY'
-          import csv
+          import base64, gzip, json, csv, time
           from pathlib import Path
           from urllib.parse import quote
+
+          raw = Path('payload/zepp_specs.b64').read_text().strip()
+          specs = json.loads(gzip.decompress(base64.b64decode(raw)).decode('utf-8'))
+          out = Path('treinos')
+          out.mkdir(exist_ok=True)
+          for old in out.glob('MUS_*.json'):
+              old.unlink()
+
+          username = 'Vinicius Manhanini'
+          avatar = 'https://zepp-public-us3-1311088246.cos.na-ashburn.myqcloud.com/com.xiaomi.hm.health/3032175522/icon.jpg?thumb=1&w=320&h=320'
+          share = 'https://img-cdn.zepp.com/20230911/training.png'
+          now = int(time.time() * 1000)
+
+          def expand_node(n):
+              ti = dict(n)
+              ti['alertRule'] = '0'
+              ti['alertRuleDetail'] = '0'
+              ti['lengthUnit'] = 0
+              ti['intervalTypeI18nKey'] = 'gapType_rest' if ti.get('intervalType') == '2' else 'gapType_training'
+              ti['lengthUnitI18nKey'] = 'gap_metric'
+              if ti.get('intervalUnit') == '10':
+                  ti['intervalUnitI18nKey'] = 'gap_pickUnit1'
+              if 'actionName' not in ti:
+                  ti['actionName'] = ''
+              if 'selfWeightType' not in ti:
+                  ti['selfWeightType'] = 0
+              if 'mainPositions' not in ti:
+                  ti['mainPositions'] = []
+              if 'subPositions' not in ti:
+                  ti['subPositions'] = []
+              return {'type':'NODE','trainingInterval':ti}
+
+          rows = []
+          for fn, (title, desc, nodes) in specs.items():
+              doc = {
+                  'username': username,
+                  'avatar': avatar,
+                  'shareUrl': share,
+                  'title': title,
+                  'description': desc,
+                  'trainingIntervals': {
+                      'type':'PARENT',
+                      'children':[expand_node(n) for n in nodes],
+                      'templateType':'0'
+                  },
+                  'modalities':[],
+                  'appName':'com.xiaomi.hm.health',
+                  'createdAt':now,
+                  'updatedAt':now,
+                  'status':'AVAILABLE',
+                  'trainingTypeId':10,
+                  'trainingTypeName':'力量训练'
+              }
+              (out/fn).write_text(json.dumps(doc, ensure_ascii=False, separators=(',',':')), encoding='utf-8')
+              stem = Path(fn).stem.replace('MUS_','')
+              week = str(int(stem[:2]))
+              workout = stem[2:]
+              rows.append([week, workout, fn, desc])
+
+          rows.sort(key=lambda r:(int(r[0]), r[1]))
+          with open('manifesto.csv','w',encoding='utf-8-sig',newline='') as f:
+              w=csv.writer(f,delimiter=';')
+              w.writerow(['Semana','Treino','Arquivo','Descrição'])
+              w.writerows(rows)
 
           repo = 'ViniciusManhanini/treinozepp'
           raw_base = f'https://raw.githubusercontent.com/{repo}/main/treinos/'
           zepp_base = 'https://fe-cdn.zepp.com/training-template/0.0.25/?data={data}&source=zepp&name=trainingtemplate_crossfit&target=share'
-
-          with open('manifesto.csv', encoding='utf-8-sig') as f:
-              rows = list(csv.DictReader(f, delimiter=';'))
-
           lines = [
-              '# Importar musculação no Zepp',
-              '',
-              '**60 treinos · 12 semanas · 5 treinos por semana**',
-              '',
-              '> O Zepp importa um template por vez. Esta página é o seu link único: abra, escolha o treino e toque em **Importar no Zepp**.',
-              '',
-              '## Treinos',
-              ''
+              '# Importar musculação no Zepp','',
+              '**60 treinos · 12 semanas · 5 treinos por semana**','',
+              '> O Zepp importa um template por vez. Esta é a página única para acessar todos os treinos.',''
           ]
-
-          current_week = None
-          for r in rows:
-              if r['Semana'] != current_week:
-                  current_week = r['Semana']
-                  lines += ['', f'### Semana {current_week}', '']
-              raw = raw_base + r['Arquivo']
-              zepp = zepp_base.format(data=quote(raw, safe=''))
-              lines.append(f"- **Treino {r['Treino']}** — {r['Descrição']} — [Importar no Zepp]({zepp})")
-
-          Path('IMPORTAR_TREINOS.md').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+          current = None
+          for week, workout, fn, desc in rows:
+              if week != current:
+                  current = week
+                  lines += [f'## Semana {week}','']
+              raw_url = raw_base + fn
+              zepp_url = zepp_base.format(data=quote(raw_url, safe=''))
+              lines.append(f'- **Treino {workout}** — {desc} — [Importar no Zepp]({zepp_url})')
+          Path('IMPORTAR_TREINOS.md').write_text('\n'.join(lines)+'\n',encoding='utf-8')
+          print('Gerados', len(specs), 'templates')
           PY
 
       - name: Commit published files
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add treinos manifesto.csv README_TECNICO.md IMPORTAR_TREINOS.md
+          git add treinos manifesto.csv IMPORTAR_TREINOS.md
           git commit -m "Publish 60 Zepp strength templates" || exit 0
           git push
