@@ -1,0 +1,70 @@
+name: Publish Zepp templates
+
+on:
+  push:
+    paths:
+      - '.github/workflows/publish-zepp.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Decode and unpack templates
+        run: |
+          rm -rf treinos /tmp/zepp-package
+          mkdir -p treinos /tmp/zepp-package
+          base64 -d payload/Time_Hibrido_Musculacao_Zepp_12_Semanas.zip.b64 > /tmp/zepp.zip
+          unzip -o /tmp/zepp.zip -d /tmp/zepp-package
+          mv /tmp/zepp-package/MUS_*.json treinos/
+          cp /tmp/zepp-package/manifesto.csv manifesto.csv
+          cp /tmp/zepp-package/README.md README_TECNICO.md
+
+      - name: Build one-link import index
+        run: |
+          python - <<'PY'
+          import csv
+          from pathlib import Path
+          from urllib.parse import quote
+
+          repo = 'ViniciusManhanini/treinozepp'
+          raw_base = f'https://raw.githubusercontent.com/{repo}/main/treinos/'
+          zepp_base = 'https://fe-cdn.zepp.com/training-template/0.0.25/?data={data}&source=zepp&name=trainingtemplate_crossfit&target=share'
+
+          with open('manifesto.csv', encoding='utf-8-sig') as f:
+              rows = list(csv.DictReader(f, delimiter=';'))
+
+          lines = [
+              '# Importar musculação no Zepp',
+              '',
+              '**60 treinos · 12 semanas · 5 treinos por semana**',
+              '',
+              '> O Zepp importa um template por vez. Esta página é o seu link único: abra, escolha o treino e toque em **Importar no Zepp**.',
+              '',
+              '## Treinos',
+              ''
+          ]
+
+          current_week = None
+          for r in rows:
+              if r['Semana'] != current_week:
+                  current_week = r['Semana']
+                  lines += ['', f'### Semana {current_week}', '']
+              raw = raw_base + r['Arquivo']
+              zepp = zepp_base.format(data=quote(raw, safe=''))
+              lines.append(f"- **Treino {r['Treino']}** — {r['Descrição']} — [Importar no Zepp]({zepp})")
+
+          Path('IMPORTAR_TREINOS.md').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+          PY
+
+      - name: Commit published files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add treinos manifesto.csv README_TECNICO.md IMPORTAR_TREINOS.md
+          git commit -m "Publish 60 Zepp strength templates" || exit 0
+          git push
