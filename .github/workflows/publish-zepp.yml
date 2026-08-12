@@ -5,6 +5,9 @@ on:
     paths:
       - '.github/workflows/publish-zepp.yml'
       - 'payload/zepp_specs.b64'
+      - 'payload/zepp_specs_01.part'
+      - 'payload/zepp_specs_02.part'
+      - 'payload/zepp_specs_03.part'
 
 permissions:
   contents: write
@@ -22,7 +25,12 @@ jobs:
           from pathlib import Path
           from urllib.parse import quote
 
-          raw = Path('payload/zepp_specs.b64').read_text().strip()
+          raw = ''.join(Path(p).read_text().strip() for p in [
+              'payload/zepp_specs.b64',
+              'payload/zepp_specs_01.part',
+              'payload/zepp_specs_02.part',
+              'payload/zepp_specs_03.part'
+          ])
           specs = json.loads(gzip.decompress(base64.b64decode(raw)).decode('utf-8'))
           out = Path('treinos')
           out.mkdir(exist_ok=True)
@@ -43,14 +51,10 @@ jobs:
               ti['lengthUnitI18nKey'] = 'gap_metric'
               if ti.get('intervalUnit') == '10':
                   ti['intervalUnitI18nKey'] = 'gap_pickUnit1'
-              if 'actionName' not in ti:
-                  ti['actionName'] = ''
-              if 'selfWeightType' not in ti:
-                  ti['selfWeightType'] = 0
-              if 'mainPositions' not in ti:
-                  ti['mainPositions'] = []
-              if 'subPositions' not in ti:
-                  ti['subPositions'] = []
+              ti.setdefault('actionName','')
+              ti.setdefault('selfWeightType',0)
+              ti.setdefault('mainPositions',[])
+              ti.setdefault('subPositions',[])
               return {'type':'NODE','trainingInterval':ti}
 
           rows = []
@@ -61,11 +65,7 @@ jobs:
                   'shareUrl': share,
                   'title': title,
                   'description': desc,
-                  'trainingIntervals': {
-                      'type':'PARENT',
-                      'children':[expand_node(n) for n in nodes],
-                      'templateType':'0'
-                  },
+                  'trainingIntervals': {'type':'PARENT','children':[expand_node(n) for n in nodes],'templateType':'0'},
                   'modalities':[],
                   'appName':'com.xiaomi.hm.health',
                   'createdAt':now,
@@ -76,9 +76,7 @@ jobs:
               }
               (out/fn).write_text(json.dumps(doc, ensure_ascii=False, separators=(',',':')), encoding='utf-8')
               stem = Path(fn).stem.replace('MUS_','')
-              week = str(int(stem[:2]))
-              workout = stem[2:]
-              rows.append([week, workout, fn, desc])
+              rows.append([str(int(stem[:2])), stem[2:], fn, desc])
 
           rows.sort(key=lambda r:(int(r[0]), r[1]))
           with open('manifesto.csv','w',encoding='utf-8-sig',newline='') as f:
@@ -89,11 +87,7 @@ jobs:
           repo = 'ViniciusManhanini/treinozepp'
           raw_base = f'https://raw.githubusercontent.com/{repo}/main/treinos/'
           zepp_base = 'https://fe-cdn.zepp.com/training-template/0.0.25/?data={data}&source=zepp&name=trainingtemplate_crossfit&target=share'
-          lines = [
-              '# Importar musculação no Zepp','',
-              '**60 treinos · 12 semanas · 5 treinos por semana**','',
-              '> O Zepp importa um template por vez. Esta é a página única para acessar todos os treinos.',''
-          ]
+          lines = ['# Importar musculação no Zepp','', '**60 treinos · 12 semanas · 5 treinos por semana**','', '> O Zepp importa um template por vez. Esta é a página única para acessar todos os treinos.','']
           current = None
           for week, workout, fn, desc in rows:
               if week != current:
