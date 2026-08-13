@@ -53,8 +53,16 @@ jobs:
                   ti['intervalUnitI18nKey'] = 'gap_pickUnit1'
               ti.setdefault('actionName','')
               ti.setdefault('selfWeightType',0)
-              ti.setdefault('mainPositions',[])
-              ti.setdefault('subPositions',[])
+              # Validated on MUS 1B V2: Zepp needs non-empty exercise metadata
+              # to preserve the native actionName instead of falling back to Barbell Squats.
+              if ti.get('intervalType') == '1' and ti.get('actionType') == 3 and ti.get('actionName'):
+                  if not ti.get('mainPositions'):
+                      ti['mainPositions'] = [14,15]
+                  if not ti.get('subPositions'):
+                      ti['subPositions'] = [26,27]
+              else:
+                  ti.setdefault('mainPositions',[])
+                  ti.setdefault('subPositions',[])
               return {'type':'NODE','trainingInterval':ti}
 
           rows = []
@@ -97,7 +105,7 @@ jobs:
               zepp_url = zepp_base.format(data=quote(raw_url, safe=''))
               lines.append(f'- **Treino {workout}** — {desc} — [Importar no Zepp]({zepp_url})')
           Path('IMPORTAR_TREINOS.md').write_text('\n'.join(lines)+'\n',encoding='utf-8')
-          print('Gerados', len(specs), 'templates')
+          print('Gerados', len(specs), 'templates com metadados Zepp')
           PY
 
       - name: Commit published files
@@ -105,5 +113,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add treinos manifesto.csv IMPORTAR_TREINOS.md
-          git commit -m "Publish 60 Zepp strength templates" || exit 0
+          git commit -m "Publish 60 Zepp strength templates with native metadata" || exit 0
           git push
